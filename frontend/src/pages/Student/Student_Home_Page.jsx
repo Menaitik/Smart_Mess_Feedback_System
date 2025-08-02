@@ -7,7 +7,6 @@ import {
   getDocs,
   query,
   where,
-  serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase/firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
@@ -36,7 +35,7 @@ const StarRating = ({ label, value, onChange }) => (
   </div>
 );
 
-// ⏰ Helper to convert time like "8:00 AM" to Date object
+// ⏰ Convert "8:00 AM" to Date object
 const parseTime = (timeStr) => {
   const [time, modifier] = timeStr.split(" ");
   let [hours, minutes] = time.split(":").map(Number);
@@ -59,7 +58,6 @@ const StudentDashboard = () => {
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [todayMenu, setTodayMenu] = useState(null);
   const [submittedMeals, setSubmittedMeals] = useState([]);
-  const [formLocked, setFormLocked] = useState(false);
   const [ratings, setRatings] = useState({
     hygiene: 3,
     quality: 3,
@@ -71,7 +69,6 @@ const StudentDashboard = () => {
     lunch: false,
     dinner: false,
   });
-
   const [allowedMeals, setAllowedMeals] = useState([]);
 
   const weekday = new Intl.DateTimeFormat("en-US", {
@@ -107,28 +104,50 @@ const StudentDashboard = () => {
     fetchMenu();
   }, [weekday]);
 
+  const saveSubmittedToLocal = (uid, meals) => {
+    const key = `feedback_${new Date().toLocaleDateString()}_${uid}`;
+    localStorage.setItem(key, JSON.stringify(meals));
+  };
+
+  const getSubmittedFromLocal = (uid) => {
+    const key = `feedback_${new Date().toLocaleDateString()}_${uid}`;
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : [];
+  };
+
   const fetchSubmittedFeedbacks = async (uid) => {
     if (!uid) return;
-    const today = new Date().toISOString().split("T")[0];
-    const q = query(collection(db, "feedbacks"), where("uid", "==", uid));
-    const snapshot = await getDocs(q);
 
-    let alreadySubmitted = false;
-    const todayMeals = [];
+    const todayMeals = getSubmittedFromLocal(uid);
 
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data();
-      const date = data.createdAt?.toDate()?.toISOString().split("T")[0];
-      if (date === today) {
-        alreadySubmitted = true;
-        if (Array.isArray(data.meals)) {
-          todayMeals.push(...data.meals);
+    if (todayMeals.length === 0) {
+      const q = query(collection(db, "feedbacks"), where("uid", "==", uid));
+      const snapshot = await getDocs(q);
+
+      const today = new Date().toLocaleDateString();
+      const submitted = [];
+
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (!data?.createdAt || !data?.meals) return;
+
+        const createdAt = new Date(
+          data.createdAt?.seconds
+            ? data.createdAt.seconds * 1000
+            : data.createdAt
+        );
+        const feedbackDate = createdAt.toLocaleDateString();
+
+        if (feedbackDate === today) {
+          submitted.push(...data.meals);
         }
-      }
-    });
+      });
 
-    setSubmittedMeals(todayMeals);
-    setFormLocked(alreadySubmitted);
+      setSubmittedMeals(submitted);
+      saveSubmittedToLocal(uid, submitted);
+    } else {
+      setSubmittedMeals(todayMeals);
+    }
   };
 
   const checkMealWindows = (menu) => {
@@ -160,50 +179,50 @@ const StudentDashboard = () => {
     setAllowedMeals(activeMeals);
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setStatus("");
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setStatus("");
 
-  const selectedMeals = Object.entries(meals)
-    .filter(([, selected]) => selected)
-    .map(([meal]) => meal);
+    const selectedMeals = Object.entries(meals)
+      .filter(([, selected]) => selected)
+      .map(([meal]) => meal);
 
-  // Removed feedback check to make it optional
+    if (selectedMeals.length === 0) {
+      setStatus("❌ Please select at least one meal.");
+      return;
+    }
 
-  if (selectedMeals.length === 0) {
-    setStatus("❌ Please select at least one meal.");
-    return;
-  }
+    const duplicate = selectedMeals.some((meal) =>
+      submittedMeals.includes(meal)
+    );
+    if (duplicate) {
+      setStatus("❌ You already submitted feedback for selected meal(s).");
+      return;
+    }
 
-  const duplicate = selectedMeals.some((meal) => submittedMeals.includes(meal));
-  if (duplicate) {
-    setStatus("❌ You already submitted feedback for selected meal(s).");
-    return;
-  }
+    try {
+      await addDoc(collection(db, "feedbacks"), {
+        uid: auth.currentUser?.uid || null,
+        email: isAnonymous ? "anonymous" : studentEmail,
+        anonymous: isAnonymous,
+        feedback,
+        ratings,
+        meals: selectedMeals,
+        createdAt: new Date(),
+      });
 
-  try {
-    await addDoc(collection(db, "feedbacks"), {
-      uid: auth.currentUser?.uid || null,
-      email: isAnonymous ? "anonymous" : studentEmail,
-      anonymous: isAnonymous,
-      feedback, // Still included — now optional
-      ratings,
-      meals: selectedMeals,
-      createdAt: serverTimestamp(),
-    });
-
-    setFeedback("");
-    setMeals({ breakfast: false, lunch: false, dinner: false });
-    setRatings({ hygiene: 3, quality: 3, quantity: 3, staff: 3 });
-    setStatus("✅ Feedback submitted successfully.");
-    setSubmittedMeals((prev) => [...prev, ...selectedMeals]);
-    setFormLocked(true);
-  } catch (err) {
-    console.error(err);
-    setStatus("❌ Failed to submit feedback.");
-  }
-};
-
+      const updatedMeals = [...submittedMeals, ...selectedMeals];
+      setFeedback("");
+      setMeals({ breakfast: false, lunch: false, dinner: false });
+      setRatings({ hygiene: 3, quality: 3, quantity: 3, staff: 3 });
+      setStatus("✅ Feedback submitted successfully.");
+      setSubmittedMeals(updatedMeals);
+      saveSubmittedToLocal(auth.currentUser?.uid, updatedMeals);
+    } catch (err) {
+      console.error(err);
+      setStatus("❌ Failed to submit feedback.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center px-4 py-10">
@@ -250,102 +269,89 @@ const handleSubmit = async (e) => {
           </div>
         </div>
 
-        {formLocked ? (
-          <p className="text-center text-red-600 font-semibold">
-            ✅ You have already submitted your feedback today. Thank you!
-          </p>
-        ) : (
-          <>
-            {/* Info */}
-            <div className="text-center text-gray-600 mb-4">
-              {isAnonymous
-                ? "Your feedback will be submitted anonymously."
-                : `Feedback will be submitted as ${studentEmail}`}
-            </div>
+        <div className="text-center text-gray-600 mb-4">
+          {isAnonymous
+            ? "Your feedback will be submitted anonymously."
+            : `Feedback will be submitted as ${studentEmail}`}
+        </div>
 
-            {/* Anonymous toggle */}
-            <div className="flex justify-end mb-4">
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={isAnonymous}
-                  onChange={() => setIsAnonymous((prev) => !prev)}
-                  className="w-4 h-4"
-                />
-                Submit Anonymously
-              </label>
-            </div>
+        <div className="flex justify-end mb-4">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={isAnonymous}
+              onChange={() => setIsAnonymous((prev) => !prev)}
+              className="w-4 h-4"
+            />
+            Submit Anonymously
+          </label>
+        </div>
 
-            {/* Meal toggles */}
-            <div className="mb-6">
-              <p className="font-medium text-gray-700 mb-2">Select Meal(s):</p>
-              <div className="flex gap-6 flex-wrap">
-                {["breakfast", "lunch", "dinner"].map((meal) => {
-                  const isSubmitted = submittedMeals.includes(meal);
-                  const isActive = allowedMeals.includes(meal);
-                  return (
-                    <label
-                      key={meal}
-                      className={`flex items-center gap-2 capitalize ${
-                        !isActive || isSubmitted ? "text-gray-400" : ""
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        disabled={!isActive || isSubmitted}
-                        checked={meals[meal]}
-                        onChange={() =>
-                          setMeals((prev) => ({
-                            ...prev,
-                            [meal]: !prev[meal],
-                          }))
-                        }
-                      />
-                      {meal}
-                      {isSubmitted && " (submitted)"}
-                      {!isSubmitted && !isActive && " (not available now)"}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
+        <div className="mb-6">
+          <p className="font-medium text-gray-700 mb-2">Select Meal(s):</p>
+          <div className="flex gap-6 flex-wrap">
+            {["breakfast", "lunch", "dinner"].map((meal) => {
+              const isSubmitted = submittedMeals.includes(meal);
+              const isActive = allowedMeals.includes(meal);
+              return (
+                <label
+                  key={meal}
+                  className={`flex items-center gap-2 capitalize ${
+                    !isActive || isSubmitted ? "text-gray-400" : ""
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    disabled={!isActive || isSubmitted}
+                    checked={meals[meal]}
+                    onChange={() =>
+                      setMeals((prev) => ({
+                        ...prev,
+                        [meal]: !prev[meal],
+                      }))
+                    }
+                  />
+                  {meal}
+                  {isSubmitted && " (submitted)"}
+                  {!isSubmitted && !isActive && " (not available now)"}
+                </label>
+              );
+            })}
+          </div>
+        </div>
 
-            {/* Star Ratings */}
-            <div className="mb-6">
-              {Object.entries(ratings).map(([key, value]) => (
-                <StarRating
-                  key={key}
-                  label={key.charAt(0).toUpperCase() + key.slice(1)}
-                  value={value}
-                  onChange={(val) =>
-                    setRatings((prev) => ({ ...prev, [key]: val }))
-                  }
-                />
-              ))}
-            </div>
+        <div className="mb-6">
+          {Object.entries(ratings).map(([key, value]) => (
+            <StarRating
+              key={key}
+              label={key.charAt(0).toUpperCase() + key.slice(1)}
+              value={value}
+              onChange={(val) =>
+                setRatings((prev) => ({ ...prev, [key]: val }))
+              }
+            />
+          ))}
+        </div>
 
-            {/* Feedback form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <textarea
-                placeholder="Write any additional feedback..."
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
-                className="w-full p-3 border rounded-md h-28 focus:outline-none focus:ring-2 focus:ring-green-400"
-              />
-              <button
-                type="submit"
-                className="w-full bg-green-600 text-white font-semibold py-2 rounded-md hover:bg-green-700"
-              >
-                Submit Feedback
-              </button>
-              {status && (
-                <p className="text-center text-sm font-medium text-green-800 mt-2">
-                  {status}
-                </p>
-              )}
-            </form>
-          </>
-        )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <textarea
+            placeholder="Write any additional feedback..."
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            className="w-full p-3 border rounded-md h-28 focus:outline-none focus:ring-2 focus:ring-green-400"
+          />
+          <button
+            type="submit"
+            className="w-full bg-green-600 text-white font-semibold py-2 rounded-md hover:bg-green-700"
+          >
+            Submit Feedback
+          </button>
+          {status && (
+            <p className="text-center text-sm font-medium text-green-800 mt-2">
+              {status}
+            </p>
+          )}
+        </form>
       </div>
     </div>
   );
