@@ -160,54 +160,50 @@ const StudentDashboard = () => {
     setAllowedMeals(activeMeals);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setStatus("");
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setStatus("");
 
-    const selectedMeals = Object.entries(meals)
-      .filter(([, selected]) => selected)
-      .map(([meal]) => meal);
+  const selectedMeals = Object.entries(meals)
+    .filter(([, selected]) => selected)
+    .map(([meal]) => meal);
 
-    if (!feedback.trim()) {
-      setStatus("❌ Additional feedback cannot be empty.");
-      return;
-    }
+  // Removed feedback check to make it optional
 
-    if (selectedMeals.length === 0) {
-      setStatus("❌ Please select at least one meal.");
-      return;
-    }
+  if (selectedMeals.length === 0) {
+    setStatus("❌ Please select at least one meal.");
+    return;
+  }
 
-    const duplicate = selectedMeals.some((meal) =>
-      submittedMeals.includes(meal)
-    );
-    if (duplicate) {
-      setStatus("❌ You already submitted feedback for selected meal(s).");
-      return;
-    }
+  const duplicate = selectedMeals.some((meal) => submittedMeals.includes(meal));
+  if (duplicate) {
+    setStatus("❌ You already submitted feedback for selected meal(s).");
+    return;
+  }
 
-    try {
-      await addDoc(collection(db, "feedbacks"), {
-        uid: auth.currentUser?.uid || null,
-        email: isAnonymous ? "anonymous" : studentEmail,
-        anonymous: isAnonymous,
-        feedback,
-        ratings,
-        meals: selectedMeals,
-        createdAt: serverTimestamp(),
-      });
+  try {
+    await addDoc(collection(db, "feedbacks"), {
+      uid: auth.currentUser?.uid || null,
+      email: isAnonymous ? "anonymous" : studentEmail,
+      anonymous: isAnonymous,
+      feedback, // Still included — now optional
+      ratings,
+      meals: selectedMeals,
+      createdAt: serverTimestamp(),
+    });
 
-      setFeedback("");
-      setMeals({ breakfast: false, lunch: false, dinner: false });
-      setRatings({ hygiene: 3, quality: 3, quantity: 3, staff: 3 });
-      setStatus("✅ Feedback submitted successfully.");
-      setSubmittedMeals((prev) => [...prev, ...selectedMeals]);
-      setFormLocked(true);
-    } catch (err) {
-      console.error(err);
-      setStatus("❌ Failed to submit feedback.");
-    }
-  };
+    setFeedback("");
+    setMeals({ breakfast: false, lunch: false, dinner: false });
+    setRatings({ hygiene: 3, quality: 3, quantity: 3, staff: 3 });
+    setStatus("✅ Feedback submitted successfully.");
+    setSubmittedMeals((prev) => [...prev, ...selectedMeals]);
+    setFormLocked(true);
+  } catch (err) {
+    console.error(err);
+    setStatus("❌ Failed to submit feedback.");
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center px-4 py-10">

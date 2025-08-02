@@ -14,6 +14,7 @@ const weekdays = [
 const StudentTimetable = () => {
   const [timetable, setTimetable] = useState({});
   const [loading, setLoading] = useState(true);
+  const [selectedDay, setSelectedDay] = useState("monday");
 
   useEffect(() => {
     const fetchTimetable = async () => {
@@ -42,49 +43,61 @@ const StudentTimetable = () => {
           📅 Weekly Mess Timetable
         </h2>
 
+        {/* Tabs */}
+        <div className="flex flex-wrap justify-center gap-2 mb-6">
+          {weekdays.map((day) => (
+            <button
+              key={day}
+              className={`capitalize px-4 py-2 rounded-md font-medium ${
+                selectedDay === day
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+              }`}
+              onClick={() => setSelectedDay(day)}
+            >
+              {day}
+            </button>
+          ))}
+        </div>
+
+        {/* Timetable Content */}
         {loading ? (
           <p className="text-center text-gray-600">Loading timetable...</p>
         ) : (
-          <div className="space-y-6">
-            {weekdays.map((day) => {
-              const meals = timetable[day];
-              return meals ? (
-                <div key={day} className="border-b pb-4">
-                  <h3 className="text-lg font-semibold text-gray-800 capitalize mb-2">
-                    {day}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700">
-                    {["breakfast", "lunch", "dinner"].map((meal) => {
-                      const item = meals[meal];
-                      return item ? (
-                        <div
-                          key={meal}
-                          className="bg-purple-50 border border-purple-200 rounded-md p-3"
-                        >
-                          <p className="font-semibold capitalize">🍽️ {meal}</p>
-                          <p>🕒 {item.time}</p>
-                          <p>🍛 {item.items}</p>
-                        </div>
-                      ) : (
-                        <div
-                          key={meal}
-                          className="bg-gray-100 border border-gray-300 rounded-md p-3 text-gray-500 italic"
-                        >
-                          {meal} not set
-                        </div>
-                      );
-                    })}
-                  </div>
+          <div>
+            {timetable[selectedDay] ? (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-800 capitalize mb-2 text-center">
+                  {selectedDay}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700">
+                  {["breakfast", "lunch", "dinner"].map((meal) => {
+                    const item = timetable[selectedDay][meal];
+                    return item ? (
+                      <div
+                        key={meal}
+                        className="bg-purple-50 border border-purple-200 rounded-md p-3"
+                      >
+                        <p className="font-semibold capitalize">🍽️ {meal}</p>
+                        <p>🕒 {item.time}</p>
+                        <p>🍛 {item.items}</p>
+                      </div>
+                    ) : (
+                      <div
+                        key={meal}
+                        className="bg-gray-100 border border-gray-300 rounded-md p-3 text-gray-500 italic"
+                      >
+                        {meal} not set
+                      </div>
+                    );
+                  })}
                 </div>
-              ) : (
-                <p
-                  key={day}
-                  className="text-gray-500 italic border-b border-gray-200 pb-2"
-                >
-                  No meals set for {day}.
-                </p>
-              );
-            })}
+              </div>
+            ) : (
+              <p className="text-center text-gray-500 italic">
+                No meals set for {selectedDay}.
+              </p>
+            )}
           </div>
         )}
       </div>

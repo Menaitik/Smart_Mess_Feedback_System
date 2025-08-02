@@ -11,8 +11,10 @@ import { useNavigate } from "react-router-dom";
 
 const AdminNotificationList = () => {
   const [notifications, setNotifications] = useState([]);
+  const [filtered, setFiltered] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editedData, setEditedData] = useState({ title: "", message: "" });
+  const [search, setSearch] = useState("");
 
   const navigate = useNavigate();
 
@@ -22,13 +24,19 @@ const AdminNotificationList = () => {
       id: doc.id,
       ...doc.data(),
     }));
-    setNotifications(data);
+    // Sort by date descending (latest first)
+    const sorted = data.sort(
+      (a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)
+    );
+    setNotifications(sorted);
+    setFiltered(sorted);
   };
 
   const handleDelete = async (id) => {
     if (window.confirm("Delete this notification?")) {
       await deleteDoc(doc(db, "notifications", id));
       setNotifications((prev) => prev.filter((n) => n.id !== id));
+      setFiltered((prev) => prev.filter((n) => n.id !== id));
     }
   };
 
@@ -43,35 +51,59 @@ const AdminNotificationList = () => {
     fetchNotifications();
   };
 
+  const handleSearch = (value) => {
+    setSearch(value);
+    if (value === "") {
+      setFiltered(notifications);
+    } else {
+      const searchLower = value.toLowerCase();
+      setFiltered(
+        notifications.filter((n) => n.title.toLowerCase().includes(searchLower))
+      );
+    }
+  };
+
   useEffect(() => {
     fetchNotifications();
   }, []);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto bg-white shadow-md rounded">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold text-purple-700">
-          📋 All Notifications
+    <div className="p-6 max-w-5xl mx-auto bg-white rounded-xl shadow-xl mt-6">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+        <h2 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
+          📢 Notifications
         </h2>
         <button
           onClick={() => navigate("/admin/addnotification")}
-          className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+          className="bg-indigo-600 text-white px-5 py-2 rounded-lg hover:bg-indigo-700 transition-all font-medium"
         >
           ➕ Add Notification
         </button>
       </div>
 
-      {notifications.length === 0 ? (
-        <p className="text-gray-500">No notifications found.</p>
+      <div className="mb-6">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => handleSearch(e.target.value)}
+          placeholder="🔍 Search by title..."
+          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+        />
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-gray-500 text-center py-10">
+          No notifications found.
+        </p>
       ) : (
-        <div className="space-y-4">
-          {notifications.map((n) => (
+        <div className="space-y-5">
+          {filtered.map((n) => (
             <div
               key={n.id}
-              className="border rounded p-4 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+              className="bg-gray-50 border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-all"
             >
               {editingId === n.id ? (
-                <div className="flex-1 space-y-2">
+                <div className="space-y-3">
                   <input
                     type="text"
                     value={editedData.title}
@@ -81,7 +113,8 @@ const AdminNotificationList = () => {
                         title: e.target.value,
                       }))
                     }
-                    className="w-full border p-1 rounded"
+                    placeholder="Title"
+                    className="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
                   />
                   <textarea
                     value={editedData.message}
@@ -91,40 +124,49 @@ const AdminNotificationList = () => {
                         message: e.target.value,
                       }))
                     }
-                    className="w-full border p-1 rounded"
+                    placeholder="Message"
+                    className="w-full border border-gray-300 px-3 py-2 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
                   />
                 </div>
               ) : (
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg">{n.title}</h3>
-                  <p className="text-gray-600">{n.message}</p>
-                  <p className="text-sm text-gray-400 mt-1">
-                    Posted by {n.createdBy || "Admin"}
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800">
+                    {n.title}
+                  </h3>
+                  <p className="text-gray-700 mt-1">{n.message}</p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    Posted by: {n.createdBy || "Admin"}{" "}
+                    {n.timestamp?.seconds && (
+                      <>
+                        •{" "}
+                        {new Date(n.timestamp.seconds * 1000).toLocaleString()}
+                      </>
+                    )}
                   </p>
                 </div>
               )}
 
-              <div className="flex-shrink-0 space-x-2">
+              <div className="mt-4 flex gap-4">
                 {editingId === n.id ? (
                   <button
                     onClick={() => handleSave(n.id)}
-                    className="text-green-600 font-medium hover:underline"
+                    className="text-green-600 hover:text-green-800 font-medium"
                   >
-                    Save
+                    💾 Save
                   </button>
                 ) : (
                   <button
                     onClick={() => handleEdit(n)}
-                    className="text-blue-600 font-medium hover:underline"
+                    className="text-blue-600 hover:text-blue-800 font-medium"
                   >
-                    Edit
+                    ✏️ Edit
                   </button>
                 )}
                 <button
                   onClick={() => handleDelete(n.id)}
-                  className="text-red-600 font-medium hover:underline"
+                  className="text-red-600 hover:text-red-800 font-medium"
                 >
-                  Delete
+                  🗑️ Delete
                 </button>
               </div>
             </div>

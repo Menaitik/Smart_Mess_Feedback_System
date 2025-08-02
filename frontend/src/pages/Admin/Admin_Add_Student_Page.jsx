@@ -15,7 +15,6 @@ import {
 import { db, app } from "../../firebase/firebaseConfig.js";
 import { initializeApp } from "firebase/app";
 
-// Create a secondary app to avoid admin logout
 const secondaryApp = initializeApp(app.options, "Secondary");
 const secondaryAuth = getAuth(secondaryApp);
 
@@ -40,9 +39,7 @@ const AddStudentForm = () => {
     const defaultPassword = "student@123";
 
     try {
-      // 🔍 Check if email or roll already exists in Firestore
       const usersRef = collection(db, "users");
-
       const emailQuery = query(usersRef, where("email", "==", formData.email));
       const rollQuery = query(usersRef, where("roll", "==", formData.roll));
 
@@ -61,7 +58,6 @@ const AddStudentForm = () => {
         return;
       }
 
-      // ✅ Create student account using secondary auth
       const userCredential = await createUserWithEmailAndPassword(
         secondaryAuth,
         formData.email,
@@ -69,7 +65,6 @@ const AddStudentForm = () => {
       );
       const uid = userCredential.user.uid;
 
-      // ✅ Save student profile to Firestore
       await setDoc(doc(db, "users", uid), {
         ...formData,
         uid,
@@ -77,10 +72,8 @@ const AddStudentForm = () => {
         createdAt: new Date(),
       });
 
-      // ✅ Sign out secondary auth instance (cleanup)
       await signOut(secondaryAuth);
 
-      // ✅ Reset form and show success message
       setMessage("✅ Student added successfully.");
       setFormData({ name: "", roll: "", course: "", email: "" });
     } catch (err) {
@@ -90,16 +83,16 @@ const AddStudentForm = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 px-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-lg">
-        <h2 className="text-2xl font-bold text-center text-purple-700 mb-6">
-          Add New Student
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 px-4">
+      <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-2xl p-10 w-full max-w-xl border border-white/30">
+        <h2 className="text-3xl font-bold text-center text-gray-800 mb-6 tracking-wide">
+          🎓 Add New Student
         </h2>
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form className="space-y-5" onSubmit={handleSubmit}>
           {["name", "roll", "course", "email"].map((field) => (
             <div key={field}>
-              <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
+              <label className="block text-sm font-semibold text-gray-700 mb-1 capitalize">
                 {field === "roll" ? "Roll / ID Number" : field}
               </label>
               <input
@@ -117,20 +110,24 @@ const AddStudentForm = () => {
                 value={formData[field]}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-400"
+                className="w-full px-4 py-2 border-2 border-purple-300 rounded-md bg-white text-gray-800 font-medium placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
               />
             </div>
           ))}
 
           <button
             type="submit"
-            className="w-full bg-purple-600 text-white font-semibold py-2 rounded-md hover:bg-purple-700 transition"
+            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold py-2.5 rounded-xl shadow-lg transform hover:scale-[1.02] transition-all duration-200"
           >
-            Add Student
+            ➕ Add Student
           </button>
 
           {message && (
-            <p className="text-center text-sm mt-4 font-medium text-green-700">
+            <p
+              className={`text-center mt-4 text-sm font-medium ${
+                message.startsWith("✅") ? "text-green-600" : "text-red-600"
+              }`}
+            >
               {message}
             </p>
           )}
